@@ -10,4 +10,5 @@
                               :releases false}]]
   :main ^:skip-aot alita.core
   :target-path "target/%s"
+  :resource-paths ["resources"]
   :profiles {:uberjar {:aot :all}})

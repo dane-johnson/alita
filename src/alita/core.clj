@@ -1,16 +1,23 @@
 (ns alita.core
   (:import java.awt.Robot
            (java.awt.event InputEvent KeyEvent)
-           (edu.cmu.sphinx.api Configuration SpeechResult LiveSpeechRecognizer))
+           (edu.cmu.sphinx.api Configuration SpeechResult
+                               StreamSpeechRecognizer
+                               LiveSpeechRecognizer))
   (:gen-class))
 
 (def ^:dynamic *robot* (Robot.))
 (def ^:dynamic *speech-config* (Configuration.))
-(.setAcousticModelPath *speech-config* "resource:/edu/cmu/sphinx/models/en-us/en-us")
-(.setDictionaryPath *speech-config* "resource:/edu/cmu/sphinx/models/en-us/cmudict-en-us.dict")
-(.setLanguageModelPath *speech-config* "resource:/edu/cmu/sphinx/models/en-us/en-us.lm.bin")
+(doto *speech-config*
+  (.setAcousticModelPath "resource:/edu/cmu/sphinx/models/en-us/en-us")
+  (.setDictionaryPath "resource:/edu/cmu/sphinx/models/en-us/cmudict-en-us.dict")
+  (.setLanguageModelPath "resource:/edu/cmu/sphinx/models/en-us/en-us.lm.bin")
+  (.setSampleRate 8000)
+  (.setGrammarPath (.getFile (clojure.java.io/resource "alita/grammars")))
+  (.setUseGrammar true)
+  (.setGrammarName "alita"))
 
-(def ^:dynamic *recognizer* (LiveSpeechRecognizer. *speech-config*))
+(def ^:dynamic *recognizer* (StreamSpeechRecognizer. *speech-config*))
 
 (defn get-result
   []
@@ -47,4 +54,6 @@
 (defn -main
   "I don't do a whole lot ... yet."
   [& args]
-  (println "Hello, World!"))
+  (.startRecognition *recognizer* (clojure.java.io/input-stream (first args)))
+  (while true
+    (get-result)))

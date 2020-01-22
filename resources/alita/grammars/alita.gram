@@ -1,0 +1,19 @@
+#JSGF V1.0;
+
+grammar alita;
+
+<wake> = alita;
+
+<action> = turn on |
+           turn off |
+           activate |
+           deactivate ;
+
+<target> = hard points |
+           super cruise ;
+
+<value> = on |
+          off ;
+           
+
+public <command> = <wake> <action> <target> [<value>];
