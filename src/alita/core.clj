@@ -1,10 +1,46 @@
 (ns alita.core
+  (:require [clojure.java.io :refer [resource input-stream make-parents reader writer file]])
   (:import java.awt.Robot
            (java.awt.event InputEvent KeyEvent)
+           (net.harawata.appdirs AppDirs AppDirsFactory)
            (edu.cmu.sphinx.api Configuration SpeechResult
                                StreamSpeechRecognizer
                                LiveSpeechRecognizer))
   (:gen-class))
+
+(def ^:dynamic *null* (writer "/dev/null"))
+
+(defmacro shush
+  [form]
+  `(with-bindings {#'*out* *null*} ~form))
+
+;; Wrap the stupid appdirs factory thing
+(defn config-dir
+  []
+  (-> (AppDirsFactory/getInstance)
+      (.getUserConfigDir "alita" nil nil)))
+
+(defn make-default-config
+  []
+  (let [filename (str (config-dir) "/config.clj")]
+    (make-parents filename)
+    (spit filename (slurp (resource "alita/configs/default.clj")))))
+
+(defn config-file
+  []
+  (let [config (file (str (config-dir) "/config.clj"))]
+    (if (not (.exists config))
+      (do (make-default-config) (recur))
+      config)))
+
+(defn load-config
+  []
+  (let [file (config-file)]
+    (if (some? file)
+      (read (java.io.PushbackReader. (reader file)))
+      (do
+        (make-default-config)
+        (recur)))))
 
 (def ^:dynamic *robot* (Robot.))
 (def ^:dynamic *speech-config* (Configuration.))
@@ -13,7 +49,7 @@
   (.setDictionaryPath "resource:/edu/cmu/sphinx/models/en-us/cmudict-en-us.dict")
   (.setLanguageModelPath "resource:/edu/cmu/sphinx/models/en-us/en-us.lm.bin")
   (.setSampleRate 8000)
-  (.setGrammarPath (.getFile (clojure.java.io/resource "alita/grammars")))
+  (.setGrammarPath (.getFile (resource "alita/grammars")))
   (.setUseGrammar true)
   (.setGrammarName "alita"))
 
@@ -21,9 +57,17 @@
 
 (defn get-result
   []
-  (let [res (.getResult *recognizer*)]
-    (if (some? res)
-      (println (.getHypothesis res)))))
+  (let [res (shush (.getResult *recognizer*))]
+    res))
+
+(defn parse-response
+  [res]
+  (if res (.getHypothesis res)))
+
+(defn response->keybinding
+  [res mapping]
+  (if res
+    (some #(if (clojure.string/ends-with? res (key %)) (val %)) mapping)))
 
 (defn hold-keycode
   [keycode]
@@ -52,8 +96,11 @@
       (release-keycode modifier))))
 
 (defn -main
-  "I don't do a whole lot ... yet."
   [& args]
-  (.startRecognition *recognizer* (clojure.java.io/input-stream (first args)))
-  (while true
-    (get-result)))
+  (let [keymapping (load-config)]
+    (shush (.startRecognition *recognizer* (input-stream (first args))))
+    (while true
+      (let [res (parse-response (get-result))
+            keybinding (response->keybinding res keymapping)]
+        (if keybinding
+          (poke keybinding))))))
